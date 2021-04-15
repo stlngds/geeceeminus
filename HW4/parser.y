@@ -155,7 +155,9 @@ TokenData *newData(int tclass) {
 TreeNode *addSibling(TreeNode *t, TreeNode *s)
 {
     if (s==NULL) {
+        return NULL;
         printf("ERROR(SYSTEM): never add a NULL to a sibling list.\n");
+        //printf("%s\n", t->token->tokenstr);
         exit(1);
     }
     if (t!=NULL) { 
@@ -252,11 +254,11 @@ decl
 
 
 varDecl
-    :   typeSpec varDeclList ';'                {$$ = $2; setType($2, $1, FALSE);}
+    :   typeSpec varDeclList ';'                {$$ = $2; setType($2, $1, false);}
 ;
 scopedVarDecl
-    :   STATIC typeSpec varDeclList ';'         {$$ = $3; setType($3, $2, TRUE);}
-    |   typeSpec varDeclList ';'                {$$ = $2; setType($2, $1, FALSE);}
+    :   STATIC typeSpec varDeclList ';'         {$$ = $3; setType($3, $2, true);}
+    |   typeSpec varDeclList ';'                {$$ = $2; setType($2, $1, false);}
 ;
 varDeclList
     :   varDeclList ',' varDeclInit             {addSibling($1, $3); $$ = $1;}
@@ -290,7 +292,7 @@ parmList
     |   parmTypeList                            {$$ = $1;}
 ;
 parmTypeList
-    :   typeSpec parmIdList                     {$$ = $2; setType($2, $1, FALSE);}
+    :   typeSpec parmIdList                     {$$ = $2; setType($2, $1, false);}
 ;
 parmIdList
     :   parmIdList ',' parmId                   {$$ = $1; addSibling($1, $3);}
@@ -318,7 +320,7 @@ localDecls
     |                                           {$$ = NULL;}
 ;
 stmtList
-    :   stmtList stmt                           {if ($1 == NULL) {$$ = $2;} else {$$ = $1; addSibling($1, $2);}}
+    :   stmtList stmt                           {if ($1 == NULL) {$$ = $2;} else {$$ = $1;} addSibling($1, $2);}
     |                                           {$$ = NULL;}
 ;
 matched
@@ -525,6 +527,7 @@ int main(int argc, char *argv[])
         }
         
     if (numErrors == 0) {
+        insertIO();
         setIsUsed(stdout, syntaxTree); //mark variables that aren't used for future warnings
         semantic(stdout, syntaxTree);
         if (declarations.lookupGlobal("main") == NULL) {

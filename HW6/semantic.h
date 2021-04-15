@@ -14,13 +14,12 @@
 #include "parser.tab.h"
 
 bool areEqual(char a, char b);
-bool checkConst(TreeNode *node[])
 char semantic(FILE*, TreeNode*);
 char setIsUsed(FILE*, TreeNode*);
 void passing(FILE *out, TreeNode *call, TreeNode *def, int num, TreeNode *node, TreeNode *p);
 void passingUsed(FILE *out, TreeNode *call, TreeNode *def, int num, TreeNode *node, TreeNode *p);
-
-void semerror(FILE *out, TreeNode *node, int m, const char *types, int pline, int lhs, int rhs, int pline2);
+void insertIO();
+void semerror(FILE *out, TreeNode *node, int m, const char *types, int pline, int lhs, int rhs);
 void semwarning(FILE *out, TreeNode *node, int m);
 
 

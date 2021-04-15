@@ -6,17 +6,25 @@
 #include "semantic.h"
 
 extern int numWarnings, numErrors;
+extern TreeNode *newDeclNode(DeclKind kind,
+                      ExpType type,
+                      TokenData *token=NULL,
+                      TreeNode *c0=NULL,
+                      TreeNode *c1=NULL,
+                      TreeNode *c2=NULL);  // save TokenData block!!
+extern TreeNode *addSibling(TreeNode *t, TreeNode *s);
 
 SymbolTable declarations;
 SymbolTable temp;
 bool justInFunc = false; //used to help determine scope
 
+int doesreturn = 0;
 int scopedepth = 0;
 int sibcheck = 1; //have semantic() go down the sibling list or not
 int hitfor = 0; //used to determine For loop scoping
+TreeNode *currFunc = NULL;
 
-
-void semerror(FILE *out, TreeNode *node, int m, const char *types = NULL, int pline = 0, int lhs = 0, int rhs = 0) {
+void semerror(FILE *out, TreeNode *node, int m, const char *types = NULL, int pline = 0, int lhs = 0, int rhs = 0, int pline2 = 0) {
     switch(m){
         char *lhss, *rhss; //used in case 1
         case 0:
@@ -76,51 +84,75 @@ void semerror(FILE *out, TreeNode *node, int m, const char *types = NULL, int pl
         case 14:
             fprintf(out, "ERROR(%d): Unary '%s' requires an operand of type %s but was given type %s.\n", node->lineno, node->token->tokenstr, types, node->children[0]->expstr);
             break;
+
         //Assignment 4
-        case 15:
+        case 15: //////
             fprintf(out, "ERROR(%d): Cannot have a break statement outside of loop.\n", node->lineno);
             break;
-        case 16:
-            fprintf(out, "ERROR(%d): Cannot use array as test condition in %s statement.\n", node->lineno, ???);
+        case 16: //////
+            fprintf(out, "ERROR(%d): Cannot use array as test condition in %s statement.\n", node->lineno, node->token->tokenstr);
             break;
-        case 17:
-            fprintf(out, "ERROR(%d): Cannot use array in position %d in range of for statement.\n", node->lineno, ???);
+        case 17: //////
+            fprintf(out, "ERROR(%d): Cannot use array in position %d in range of for statement.\n", node->lineno, pline);
             break;
-        case 18:
-            fprintf(out, "ERROR(%d): Expecting %s in parameter %i of call to '%s' declared on line %d but got %s.\n", node->lineno, ?, ?, ?, ?, ?);
+        case 19: //////
+            fprintf(out, "ERROR(%d): Expecting type %s in position %d in range of for statement but got type %s.\n", node->lineno, "int", pline, node->expstr);
             break;
-        case 19:
-            fprintf(out, "ERROR(%d): Expecting %s in position %d in range of for statement but got %s.\n", node->lineno, ?, ?, ?);
+        case 20: //////
+            fprintf(out, "ERROR(%d): Expecting Boolean test condition in %s statement but got type %s.\n", node->lineno, node->token->tokenstr, node->children[0]->expstr);
             break;
-        case 20:
-            fprintf(out, "ERROR(%d): Expecting Boolean test condition in %s statement but got type %s.\n", node->lineno, ?, ?);
+
+        //call type mismatches
+        //handled in passing() instead of here
+        case 18: //////
+            //fprintf(out, "ERROR(%d): Expecting type %s in parameter %i of call to '%s' declared on line %d but got type %s.\n", node->lineno, types, pline2, tmp->token->tokenstr, tmp->lineno, ?);
             break;
-        case 21:
-            fprintf(out, "ERROR(%d): Expecting array in parameter %i of call to '%s' declared on line %d.\n", node->lineno, ?, ?, ?);
+        case 21: //////
+            //lookup function being called, get the lineno
+            //fprintf(out, "ERROR(%d): Expecting array in parameter %i of call to '%s' declared on line %d.\n", node->lineno, pline2, tmp->token->tokenstr, tmp->lineno);
             break;
-        case 22:
-            fprintf(out, "ERROR(%d): Function '%s' at line %d is expecting no return value, but return has a value.\n", node->lineno, ?, ?);
+        case 27: //////
+            //fprintf(out, "ERROR(%d): Not expecting array in parameter %i of call to '%s' declared on line %d.\n", node->lineno, pline2, ?, pline);
             break;
-        case 23:
-            fprintf(out, "ERROR(%d): Function '%s' at line %d is expecting to return %s but return has no value.\n", node->lineno, ?, ?, ?);
+
+        //function errors
+        case 22: //////
+            fprintf(out, "ERROR(%d): Function '%s' at line %d is expecting no return value, but return has a value.\n", node->lineno, currFunc->token->tokenstr, currFunc->lineno);
             break;
-        case 24:
-            fprintf(out, "ERROR(%d): Function '%s' at line %d is expecting to return %s but returns %s.\n", node->lineno, ?, ?, ?, ?);
+        case 23: //////
+            fprintf(out, "ERROR(%d): Function '%s' at line %d is expecting to return type %s but return has no value.\n", node->lineno, currFunc->token->tokenstr, currFunc->lineno, currFunc->expstr);
             break;
-        case 25:
-            fprintf(out, "ERROR(%d): Initializer for variable '%s' is not a constant expression.\n", node->lineno, ?);
+        case 24: //////
+            fprintf(out, "ERROR(%d): Function '%s' at line %d is expecting to return type %s but returns type %s.\n", node->lineno, currFunc->token->tokenstr, currFunc->lineno, currFunc->expstr, node->children[0]->expstr);
             break;
-        case 26:
-            fprintf(out, "ERROR(%d): Initializer for variable '%s' requires both operands be arrays or not but variable is%s an array and rhs is%s an array.\n", node->lineno, ?, ?, ?);
+
+        case 25: //////
+            fprintf(out, "ERROR(%d): Initializer for variable '%s' is not a constant expression.\n", node->lineno, node->token->tokenstr);
             break;
-        case 27:
-            fprintf(out, "ERROR(%d): Not expecting array in parameter %i of call to '%s' declared on line %d.\n", node->lineno, ?, ?, ?);
+
+        case 26: //////
+            if (lhs == 1) {
+                lhss = strdup("");
+            }
+            else {
+                lhss = strdup(" not");
+            }
+            if (rhs == 1) {
+                rhss = strdup("");
+            }
+            else {
+                rhss = strdup(" not");
+            }
+            fprintf(out, "ERROR(%d): Initializer for variable '%s' requires both operands be arrays or not but variable is%s an array and rhs is%s an array.\n", node->lineno, node->token->tokenstr, lhss, rhss);
             break;
-        case 28:
-            fprintf(out, "ERROR(%d): Too few parameters passed for function '%s' declared on line %d.\n", node->lineno, ?, ?);
+        case 28: //////
+            fprintf(out, "ERROR(%d): Too few parameters passed for function '%s' declared on line %d.\n", node->lineno, node->token->tokenstr, pline);
             break;
-        case 29:
-            fprintf(out, "ERROR(%d): Too many parameters passed for function '%s' declared on line %d.\n", node->lineno, ?, ?);
+        case 29: //////
+            fprintf(out, "ERROR(%d): Too many parameters passed for function '%s' declared on line %d.\n", node->lineno, node->token->tokenstr, pline);
+            break;
+        case 30:
+            fprintf(out, "ERROR(%d): Initializer for variable '%s' of type %s is of type %s\n", node->lineno, node->token->tokenstr, node->expstr, types);
             break;
     }
     numErrors++;
@@ -140,13 +172,15 @@ void semwarning(FILE *out, TreeNode *node, int m) {
         case 3:
             fprintf(out, "WARNING(%d): Variable '%s' may be uninitialized when used here.\n", node->lineno, node->token->tokenstr);
             break;
+
+        //Assignment 4
         case 4:
-            fprintf(out, "WARNING(%d): Expecting to return %s but function '%s' has no return statement.\n", node->lineno, ?, ?);
+            fprintf(out, "WARNING(%d): Expecting to return type %s but function '%s' has no return statement.\n", node->lineno, node->expstr, node->token->tokenstr);
             break;
-        case 5:
+        case 5: //semi-dupe of 0
             fprintf(out, "WARNING(%d): The function '%s' seems not to be used.\n", node->lineno, node->token->tokenstr);
             break;
-        case 6:
+        case 6: //semi-dupe of 0
             fprintf(out, "WARNING(%d): The parameter '%s' seems not to be used.\n", node->lineno, node->token->tokenstr);
             break;
     }
@@ -157,6 +191,17 @@ bool areEqual(char a, char b) { //are equal, regardless of capitalization
     return a == 'u' || b == 'u' || a == b || a == b - 32 || a == b + 32;
 }
 
+//check if any child isn't isConst
+bool checkconst(TreeNode *node[]) {
+    for (int i = 0; i < 3; i++) {
+        if (node[i] != NULL)
+            if (!node[i]->isConst) {
+                return false;
+                }
+    }
+    return true;
+}
+
 //recursive sibling traversal, used when analyzing variables passed in function calls
 void passing(FILE *out, TreeNode *call, TreeNode *def, int num, TreeNode *node, TreeNode *p) {
     //more fun errors go here in the future
@@ -165,12 +210,12 @@ void passing(FILE *out, TreeNode *call, TreeNode *def, int num, TreeNode *node, 
     }
     if (call == NULL) {
         //too few arguments
-        //errors go here in the future
+        semerror(out, node, 28, "ERROR", p->lineno);
         return;
     }
     if (def == NULL) {
         //too many args
-        //errors go here in the future
+        semerror(out, node, 29, "ERROR", p->lineno);
         int sbak = sibcheck;
         sibcheck = 1;
         semantic(out, call);
@@ -182,6 +227,24 @@ void passing(FILE *out, TreeNode *call, TreeNode *def, int num, TreeNode *node, 
     sibcheck = 0; //do this to not check siblings more than once
     char r = semantic(out, call);
     sibcheck = sbak;
+
+    //check for mismatches between call and def
+    //type mismatch
+    if (call->expstr[0] != def->expstr[0] && call->expstr[0] != 'u') {
+        fprintf(out, "ERROR(%d): Expecting type %s in parameter %i of call to '%s' declared on line %d but got type %s.\n", node->lineno, def->expstr, num, p->token->tokenstr, p->lineno, call->expstr);
+        numErrors++;
+    }
+    //not expecting array
+    if (call->isArray && !def->isArray) {
+        fprintf(out, "ERROR(%d): Not expecting array in parameter %i of call to '%s' declared on line %d.\n", node->lineno, num, p->token->tokenstr, def->lineno);
+        numErrors++;
+    }
+    //expecting array
+    if (!call->isArray && def->isArray) {
+        fprintf(out, "ERROR(%d): Expecting array in parameter %i of call to '%s' declared on line %d.\n", node->lineno, num, p->token->tokenstr, def->lineno);
+        numErrors++;
+    }
+
     passing(out, call->sibling, def->sibling, num+1, node, p);
 }
 
@@ -197,6 +260,7 @@ void passing(FILE *out, TreeNode *call, TreeNode *def, int num, TreeNode *node, 
 // n: null //don't think this ever happens but...?
 // Capitals indicate arrays.
 char semantic(FILE *out, TreeNode *node) {
+
     if (node == NULL) {
         return 'n';
     }
@@ -218,11 +282,34 @@ char semantic(FILE *out, TreeNode *node) {
                     switch(node->subkind.decl) {
                         case ParamK:
                             node->isInitialized = true;
+                            node->isConst = true;
                         case VarK:
                             //if var is initialized
                             if (node->children[0] != NULL) {
-                                //c[0] = 0;
-                                //semantic(out, node->children[0]);
+                                c[0] = 0;
+                                r = semantic(out, node->children[0]);
+                                if ((r > 96 && node->isArray) || (r < 97 && !node->isArray)) {
+                                    //array initializer mismatch
+                                    int left, right;
+                                    if (r > 96) {
+                                        left = 1;
+                                        right = 0;
+                                    }
+                                    else {
+                                        left = 0;
+                                        right = 1;
+                                    }
+                                    semerror(out, node, 26, "ERROR", 0, left, right, 0);
+                                }
+                                if (node->subkind.decl == VarK) {
+                                    if (!node->children[0]->isConst) {
+                                        //nonconstant initializer
+                                        semerror(out, node, 25);
+                                    }
+                                }
+                                if (!areEqual(node->expstr[0], r)) {
+                                    semerror(out, node, 30, node->children[0]->expstr);
+                                }
                             }
                             r = node->expstr[0];
                             //if already declared
@@ -230,8 +317,13 @@ char semantic(FILE *out, TreeNode *node) {
                                 semerror(out, node, 10, "ERROR", ((TreeNode*)(declarations.lookup(node->token->tokenstr)))->lineno);
                             }
                             else if (node->isUsed != true) {
-                                semwarning(out, node, 0);
+                                //seems not to be used
+                                if (node->subkind.decl == ParamK)
+                                    semwarning(out, node, 6);
+                                else //VarK
+                                    semwarning(out, node, 0);
                             }
+                            
                             //fprintf(out, "VarK or ParamK %s has r %c with expstr %s\n", node->token->tokenstr, r, node->expstr);
                             
                             break;
@@ -253,11 +345,18 @@ char semantic(FILE *out, TreeNode *node) {
                             //main can't have arguments
                             if (node->children[0] != NULL)
                             if (strcmp(node->token->tokenstr, "main") == 0 && strcmp(node->children[0]->token->tokenstr, "{") != 0) {
-                                printf("ERROR(LINKER): A function named 'main()' must be defined.\n");
+                                printf("ERROR(LINKER): A function named 'main' with no parameters must be defined.\n");
                                 numErrors++;
+                            }
+                            //seems not to be used
+                            //fprintf(out, "%s %i\n", node->token->tokenstr, node->isUsed);
+                            p = (TreeNode*)temp.lookup(node->token->tokenstr);
+                            if (p->isUsed != true) { //for some reason, isUsed doesn't always work, but p does.
+                                semwarning(out, node, 5);
                             }
                             declarations.enter(node->token->tokenstr);
                             scoped = true;
+                            currFunc = node;
                             //fprintf(out, "FuncK %s has r %c\n", node->token->tokenstr, r);
                             break;
 
@@ -283,18 +382,22 @@ char semantic(FILE *out, TreeNode *node) {
                                 }
                                 else {
                                     r = p->expstr[0];
+                                    node->isStatic = p->isStatic;
                                     if (p->isArray) {
                                         r -= 32;
+                                        node->isArray = true;
                                     }
+                                    if (node->isInitialized)
+                                        p->isInitialized = true;
                                     if (p != g) //global scoped vars may be initialized elsewhere in the code, so we can't make any hard and fast claims about them
-                                    if (p->isInitialized != true && p->isForIdDecl != true && b == 1) {
+                                    if (p->isInitialized != true && p->isForIdDecl != true && b == 1 && node->isStatic != true) {
                                             //variable may be uninitialized when used here
                                             semwarning(out, node, 3);
                                             node->isInitialized = true; //prevent further warnings about the same variable later on
                                             p->isInitialized = true; //?
                                         }
                                 }
-                                //node->isUsed = true; //but this does
+                                node->isConst = false;
                             }
                             break;
 
@@ -319,6 +422,7 @@ char semantic(FILE *out, TreeNode *node) {
                                         r -= 32;
                                     }
                                 }
+                                node->isConst = false;
                             }
                             break;
 
@@ -358,9 +462,12 @@ char semantic(FILE *out, TreeNode *node) {
             else {
                 justInFunc = false;
             }
+            node->isConst = false;
             break;
 
         case FOR:
+        scopedepth++;
+        looped = true;
             node->children[0]->isForIdDecl = true; //deprecated flag?
             if (!justInFunc){
                 declarations.enter("for");
@@ -373,6 +480,7 @@ char semantic(FILE *out, TreeNode *node) {
             semantic(out, node->children[0]);
             c[1] = 0;
             semantic(out, node->children[1]);
+            if (node->children[2] != NULL) //otherwise segfaults if nothing follows "do"
             if (strcmp(node->children[2]->token->tokenstr, "{") == 0) {
                 hitfor = 1;
             }
@@ -381,7 +489,28 @@ char semantic(FILE *out, TreeNode *node) {
             break;
 
         case TO:
-            //?
+            c[0] = 0;
+            r = semantic(out, node->children[0]);
+            if (r < 97)
+                //can't put arrays in ranges
+                semerror(out, node->children[0], 17, "ERROR", 1);
+            if (!(r == 'i' || r == 'I' || r == 'u' || r == 'U'))
+                //can't put non-ints(?) in ranges
+                semerror(out, node->children[0], 19, "ERROR", 1);
+            c[1] = 0;
+            r = semantic(out, node->children[1]);
+            if (r < 97)
+                semerror(out, node->children[1], 17, "ERROR", 2);
+            if (!(r == 'i' || r == 'I' || r == 'u' || r == 'U'))
+                semerror(out, node->children[1], 19, "ERROR", 2);
+            c[2] = 0;
+            if (node->children[2] != NULL) {
+                r = semantic(out, node->children[2]);
+                if(r < 97)
+                    semerror(out, node->children[2], 17, "ERROR", 3);
+                if (!(r == 'i' || r == 'I' || r == 'u' || r == 'U'))
+                    semerror(out, node->children[2], 19, "ERROR", 3);
+            }
             break;
 
         case BY:
@@ -395,29 +524,47 @@ char semantic(FILE *out, TreeNode *node) {
         case IF:
             c[0] = 0;
             r = semantic(out, node->children[0]);
+            if (!(r == 'b' || r == 'B')) {
+                //can't test a non-boolean
+                semerror(out, node, 20);
+            }
+            if (r < 97) {
+                //can't test an array
+                semerror(out, node, 16);
+            }
             r = 'v';
+            node->isConst = false;
             break;
 
         case BREAK: //need to check how deep we are in scope
             if (scopedepth == 0) {
-                //error goes here in the future
+                semerror(out, node, 15);
             }
             r = 'v';
+            node->isConst = false;
             break;
 
         case RETURN:
-            //returned array
-            //fprintf(out, "return node is %s\n", node->children[0]->token->tokenstr);
+            doesreturn = 1;
             c[0] = 0;
             r = semantic(out, node->children[0]);
+            if (currFunc->expstr[0] == 'v' && r != 'n') {
+                //returned value on void function
+                semerror(out, node, 22);
+            }
+            if (currFunc->expstr[0] != 'v' && r == 'n') {
+                //returned nothing
+                semerror(out, node, 23);
+            }
+            if (currFunc->expstr[0] != 'v' && r != 'n' && !areEqual(currFunc->expstr[0], r)) {
+                //return type mismatch
+                semerror(out, node, 24);
+            }
             if (r < 97) {
                 semerror(out, node, 8);
             }
-            //TODO in Assignment 4:
-            //returned wrong type
-            //returned nothing and function wasn't void
-            //returned a type and function was void
             r = 'v';
+            node->isConst = checkconst(node->children);
             break;
 
         case '=':
@@ -478,7 +625,7 @@ char semantic(FILE *out, TreeNode *node) {
                     left = 1;
                     right = 0;
                 }
-                semerror(out, node, 1, "ERROR", 0, left, right);
+                semerror(out, node, 1, "ERROR", 0, left, right, 0);
             }
             break;
 
@@ -486,6 +633,7 @@ char semantic(FILE *out, TreeNode *node) {
         case SUBASS:
         case MULASS:
         case DIVASS:
+        node->children[0]->isInitialized = true;
         case '+':
         case '-':
         case '*':
@@ -511,6 +659,7 @@ char semantic(FILE *out, TreeNode *node) {
                 semerror(out, node, 12);
             }
             r = 'i';
+            node->isConst = checkconst(node->children);
             break;
 
         case INC:
@@ -528,6 +677,7 @@ char semantic(FILE *out, TreeNode *node) {
                 semerror(out, node, 12);
             }
             r = 'i';
+            node->isConst = checkconst(node->children);
             break;
 
         case AND:
@@ -552,6 +702,7 @@ char semantic(FILE *out, TreeNode *node) {
                 semerror(out, node, 12);
             }
             r = 'b';
+            node->isConst = checkconst(node->children);
             break;
 
         case NOT:
@@ -568,6 +719,7 @@ char semantic(FILE *out, TreeNode *node) {
                 semerror(out, node, 12);
             }
             r = 'b';
+            node->isConst = checkconst(node->children);
             break;
         
         case LEQ:
@@ -595,9 +747,10 @@ char semantic(FILE *out, TreeNode *node) {
                     left = 1;
                     right = 0;
                 }
-                semerror(out, node, 1, "ERROR", 0, left, right);
+                semerror(out, node, 1, "ERROR", 0, left, right, 0);
             }
             r = 'b';
+            node->isConst = checkconst(node->children);
             break;
 
         case MIN:
@@ -618,6 +771,7 @@ char semantic(FILE *out, TreeNode *node) {
                 //rhs wrong
                 semerror(out, node, 3, "int");
             }
+            node->isConst = checkconst(node->children);
             break;
 
         case EQ:
@@ -650,9 +804,10 @@ char semantic(FILE *out, TreeNode *node) {
                     left = 1;
                     right = 0;
                 }
-                semerror(out, node, 1, "ERROR", 0, left, right);
+                semerror(out, node, 1, "ERROR", 0, left, right, 0);
             }
             r = 'b';
+            node->isConst = checkconst(node->children);
             break;
 
         case CHSIGN: //unary
@@ -670,10 +825,12 @@ char semantic(FILE *out, TreeNode *node) {
                 semerror(out, node, 12);
             }
             r = 'i';
+            node->isConst = checkconst(node->children);
             break;
 
         case SIZEOF: //unary
             c[0] = 0;
+            //node->children[0]->isInitialized = true; //test output demands this
             r = semantic(out, node->children[0]);
             node->token->tokenstr = strdup("sizeof");
             
@@ -682,10 +839,12 @@ char semantic(FILE *out, TreeNode *node) {
                 semerror(out, node, 13);
             }
             r = 'i';
+            node->isConst = checkconst(node->children);
             break;
 
         case '?':
             c[0] = 0;
+            node->children[0]->isInitialized = true; //test output demands this
             r = semantic(out, node->children[0]);
             
             if (r != 'u')
@@ -698,12 +857,15 @@ char semantic(FILE *out, TreeNode *node) {
                 semerror(out, node, 12);
             }
             r = 'i';
+            node->isConst = false;
             break;
 
         case '[':
             c[0] = 0;
             r = semantic(out, node->children[0]); //ID
+            node->children[0]->isArray = false; //an indexed array is not an array, it's the basic data type
             c[1] = 0;
+            node->children[1]->isInitialized = true; //test output demands that uninit warnings not be thrown at array indices. This has been acknowledged as a bug by Professor Heckendorn but he decided to leave it as-is.
             tmp = semantic(out, node->children[1]); //Index
             if (r > 96) {
                 if (node->children[0]->token->tokenclass == ID) {
@@ -714,7 +876,7 @@ char semantic(FILE *out, TreeNode *node) {
             else {
                 r += 32;
             }
-            if (!(tmp == 'i' || tmp == 'I')) {
+            if (!(tmp == 'i' || tmp == 'I' || tmp == 'u' || tmp == 'U')) {
                 //indexed by non-int
                 semerror(out, node, 5);
             }
@@ -725,6 +887,7 @@ char semantic(FILE *out, TreeNode *node) {
                 }
             }
             //keep r
+            node->isConst = checkconst(node->children);
             break;
 
         case '.':
@@ -736,10 +899,12 @@ char semantic(FILE *out, TreeNode *node) {
 
         case CHARCONST:
             r = 'c';
+            node->isConst = true;
             break;
 
         case STRINGCONST:
             r = 'C';
+            node->isConst = true;
             break;
 
         case NUMCONST:
@@ -749,6 +914,7 @@ char semantic(FILE *out, TreeNode *node) {
             else {
                 r = 'i';
             }
+            node->isConst = true;
             break;
 
         case BOOLCONST:
@@ -758,10 +924,12 @@ char semantic(FILE *out, TreeNode *node) {
             else {
                 r = 'b';
             }
+            node->isConst = true;
             break;
 
         default: //should never happen
             fprintf(out, "Something horrible happened analyzing line %i, token %s\n", node->lineno, node->token->tokenstr);
+            node->isConst = false;
             break;
     }
 
@@ -801,6 +969,9 @@ char semantic(FILE *out, TreeNode *node) {
             break;
     }
     
+    //if (r < 97)
+    //    node->isArray = true;
+
     //traversal
     for (int i = 0; i < 3; i++) {
         if (c[i]) {
@@ -808,7 +979,16 @@ char semantic(FILE *out, TreeNode *node) {
         }
     }
 
-    if (scoped) {
+    if (scoped == true) { //hit FuncK
+        //expected return but didn't get one
+        if (node->token->tokenclass == ID) 
+        if (node->nodekind == DeclK) 
+        if (node->subkind.decl = FuncK) {
+            if (!(node->expstr[0] == 'v' || node->expstr[0] == 'u') && doesreturn < 1) {
+                semwarning(out, node, 4);
+            }
+            doesreturn = 0;
+        }
         declarations.leave();
     }
     if (looped) {
@@ -818,8 +998,109 @@ char semantic(FILE *out, TreeNode *node) {
     if (sib) {
         semantic(out, node->sibling);
     }
-
     return r;
+}
+
+//insert IO routine prototypes into the symbol table
+void insertIO () {
+    //void output(int)
+    //construct TokenData of FuncK node
+    TokenData *outputtd = (TokenData*)malloc(sizeof(TokenData));
+    outputtd->linenum = -1;
+    outputtd->tokenstr = strdup("output");
+    outputtd->tokenclass = ID;
+    //construct TokenData of integer parameter
+    TokenData *outputparmtd = (TokenData*)malloc(sizeof(TokenData));
+    outputparmtd->linenum = -1;
+    outputparmtd->tokenstr = strdup("*dummy*");
+    outputparmtd->tokenclass = NUMCONST;
+    //construct ParamK TreeNode
+    TreeNode *outputparmtn = newDeclNode(ParamK, Integer, outputparmtd);
+    //construct FuncK TreeNode, with parameter node as child
+    TreeNode *outputtn = newDeclNode(FuncK, Void, outputtd, outputparmtn);
+    declarations.insert("output", outputtn);
+
+    //void outputb(bool)
+    //construct TokenData of FuncK node
+    TokenData *outputbtd = (TokenData*)malloc(sizeof(TokenData));
+    outputbtd->linenum = -1;
+    outputbtd->tokenstr = strdup("outputb");
+    outputbtd->tokenclass = ID;
+    //construct TokenData of boolean parameter
+    TokenData *outputbparmtd = (TokenData*)malloc(sizeof(TokenData));
+    outputbparmtd->linenum = -1;
+    outputbparmtd->tokenstr = strdup("*dummy*");
+    outputbparmtd->tokenclass = BOOLCONST;
+    //construct parameter TreeNode
+    TreeNode *outputbparmtn = newDeclNode(ParamK, Boolean, outputbparmtd);
+    //construct FuncK TreeNode, with parameter node as child
+    TreeNode *outputbtn = newDeclNode(FuncK, Void, outputbtd, outputbparmtn);
+    declarations.insert("outputb", outputbtn);
+
+    //void outputc(char)
+    //construct TokenData of FuncK node
+    TokenData *outputctd = (TokenData*)malloc(sizeof(TokenData));
+    outputctd->linenum = -1;
+    outputctd->tokenstr = strdup("outputc");
+    outputctd->tokenclass = ID;
+    //construct TokenData of char parameter
+    TokenData *outputcparmtd = (TokenData*)malloc(sizeof(TokenData));
+    outputcparmtd->linenum = -1;
+    outputcparmtd->tokenstr = strdup("*dummy*");
+    outputcparmtd->tokenclass = CHARCONST;
+    //construct parameter TreeNode
+    TreeNode *outputcparmtn = newDeclNode(ParamK, Char, outputcparmtd);
+    //construct FuncK TreeNode, with parameter node as child
+    TreeNode *outputctn = newDeclNode(FuncK, Void, outputctd, outputcparmtn);
+    declarations.insert("outputc", outputctn);
+
+    //int input()
+    //construct TokenData of FuncK node
+    TokenData *inputtd = (TokenData*)malloc(sizeof(TokenData));
+    inputtd->linenum = -1;
+    inputtd->tokenstr = strdup("input");
+    inputtd->tokenclass = ID;
+    //construct FuncK TreeNode
+    TreeNode *inputtn = newDeclNode(FuncK, Integer, inputtd);
+    declarations.insert("input", inputtn);
+
+    //bool inputb()
+    //construct TokenData of FuncK node
+    TokenData *inputbtd = (TokenData*)malloc(sizeof(TokenData));
+    inputbtd->linenum = -1;
+    inputbtd->tokenstr = strdup("inputb");
+    inputbtd->tokenclass = ID;
+    //construct FuncK TreeNode
+    TreeNode *inputbtn = newDeclNode(FuncK, Boolean, inputbtd);
+    declarations.insert("inputb", inputbtn);
+
+    //char inputc()
+    //construct TokenData of FuncK node
+    TokenData *inputctd = (TokenData*)malloc(sizeof(TokenData));
+    inputctd->linenum = -1;
+    inputctd->tokenstr = strdup("inputc");
+    inputctd->tokenclass = ID;
+    //construct FuncK TreeNode
+    TreeNode *inputctn = newDeclNode(FuncK, Char, inputctd);
+    declarations.insert("inputc", inputctn);
+
+    //void outnl()
+    //construct TokenData of FuncK node
+    TokenData *outnltd = (TokenData*)malloc(sizeof(TokenData));
+    outnltd->linenum = -1;
+    outnltd->tokenstr = strdup("outnl");
+    outnltd->tokenclass = ID;
+    //construct FuncK TreeNode
+    TreeNode *outnltn = newDeclNode(FuncK, Void, outnltd);
+    declarations.insert("outnl", outnltn);
+
+    //create a tree from these
+    addSibling(inputtn, inputbtn);
+    addSibling(inputtn, inputctn);
+    addSibling(inputtn, outputtn);
+    addSibling(inputtn, outputbtn);
+    addSibling(inputtn, outputctn);
+    addSibling(inputtn, outnltn);
 }
 
 //traverse the tree to determine what VarK never get used as IdK, to print a warning later in semantic().
@@ -827,6 +1108,8 @@ char setIsUsed (FILE *out, TreeNode *node) {
     if (node == NULL) {
         return 'n';
     }
+    //printf("%s\n", node->token->tokenstr);
+    fflush(out);
     char r = 'u'; //return type of treenode
     int c[] = {1, 1, 1}; //indicates checked children with semantic(), so we don't check them again later
     int sib = sibcheck; //both used in passing() to not check siblings more than once
@@ -847,8 +1130,15 @@ char setIsUsed (FILE *out, TreeNode *node) {
                             if (!temp.insert(node->token->tokenstr, node) && node->isForIdDecl != true) {
 
                             }
-                            if (!(!temp.lookupGlobal(node->token->tokenstr))) { //if global scope
-                                node->isUsed = true;
+                            if (scopedepth < 1) { //if global scope
+                                c[0] = 0;
+                                setIsUsed(out, node->children[0]);
+                                if (node->children[0] != NULL)
+                                if (node->children[0]->token != NULL)
+                                if (node->children[0]->token->tokenstr != NULL)
+                                if (strcmp(node->token->tokenstr, node->children[0]->token->tokenstr) == 0)
+                                    //edge case where if a global is used to initialize itself, it does not count as used
+                                    node->isUsed = false;
                             }
                             break;
 
@@ -856,10 +1146,13 @@ char setIsUsed (FILE *out, TreeNode *node) {
                             if ((node->children[1] != NULL) && (node->children[1]->token->tokenclass == '{')) {
                                 justInFunc = true;
                             }
-
+                            if (strcmp(node->token->tokenstr, "main") == 0) { //main is always used
+                                node->isUsed = true;
+                            }
                             if (!temp.insertGlobal(node->token->tokenstr, node)) {
 
                             }
+                            
                             temp.enter(node->token->tokenstr);
                             scoped = true;
                             break;
@@ -878,6 +1171,7 @@ char setIsUsed (FILE *out, TreeNode *node) {
                             node->isUsed = true;
                             if (p != NULL) {
                                 p->isUsed = true;
+                                break;
                             }
                             if (g != NULL /*&& p == NULL*/) { //we can only assume the global var is being used if a local doesn't exist //EDIT: Never mind, doesn't match test output?
                                 g->isUsed = true;
@@ -885,12 +1179,15 @@ char setIsUsed (FILE *out, TreeNode *node) {
                             break;
 
                         case CallK:
-                            p = (TreeNode*)declarations.lookup(node->token->tokenstr); //FuncK
-
+                            node->isUsed = true;
+                            p = (TreeNode*)temp.lookup(node->token->tokenstr); //FuncK
                             if (p == NULL) {
                                 //function not declared
+                                //fprintf(out, "%s\n", node->token->tokenstr);
                             }
                             else {
+                                //fprintf(out, "%s %s\n", node->token->tokenstr, p->token->tokenstr);
+                                p->isUsed = true;
                                 //tried to call a variable
                                 if (p->subkind.decl == VarK) {
                                 }
@@ -935,6 +1232,7 @@ char setIsUsed (FILE *out, TreeNode *node) {
             setIsUsed(out, node->children[0]);
             c[1] = 0;
             setIsUsed(out, node->children[1]);
+            if (node->children[2] != NULL) //otherwise segfaults if nothing follows "do"
             if (strcmp(node->children[2]->token->tokenstr, "{") == 0) {
                 hitfor = 1;
             }
@@ -949,6 +1247,17 @@ char setIsUsed (FILE *out, TreeNode *node) {
             c[0] = 0;
             r = setIsUsed(out, node->children[0]);
             r = 'v';
+            break;
+
+        case TO:
+            c[0] = 0;
+            r = setIsUsed(out, node->children[0]);
+            c[1] = 0;
+            r = setIsUsed(out, node->children[1]);
+            c[2] = 0;
+            if (node->children[2] != NULL) {
+                r = setIsUsed(out, node->children[2]);
+            }
             break;
 
         default:

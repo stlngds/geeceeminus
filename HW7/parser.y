@@ -30,6 +30,11 @@ extern int ourGetopt(int, char**, char*);
 extern int optind;
 extern char *optarg;
 
+extern void gencode(TreeNode*, int, bool);
+extern void emitAll(TreeNode*);
+FILE *code; //used in emitcode
+
+
 TreeNode *syntaxTree;
 
 //Prototypes
@@ -508,6 +513,7 @@ int main(int argc, char *argv[])
     int c;
     int pflag, Pflag, Mflag, errflag;
     char *ofile;
+    char filename[256];
     pflag = 0;
     errflag = 0;
 
@@ -561,6 +567,9 @@ int main(int argc, char *argv[])
         if (optind < argc) {
             //(void)printf("file: %s\n", argv[optind]);
             yyin = fopen(argv[optind], "r");
+            strcpy(filename, argv[optind]);
+            filename[strlen(filename) - 3] = '\0';
+            strcat(filename, ".tm");
             optind++;
         }
         else {
@@ -593,6 +602,12 @@ int main(int argc, char *argv[])
             fprintf(stdout, "Offset for end of global space: %d\n", goffset);
         }
         
+        if (numErrors == 0) {
+            
+            code = fopen(filename, (char*)"w");
+
+            emitAll(syntaxTree);
+        }
 
     }
 

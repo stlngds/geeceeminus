@@ -271,6 +271,7 @@ char semantic(FILE *out, TreeNode *node) {
     char r = 'u'; //return type of treenode
     int c[] = {1, 1, 1}; //indicates checked children with semantic(), so we don't check them again later
     int sib = sibcheck; //both used in passing() to not check siblings more than once
+    bool justInFunctmp;
     int numsibs = 0;
     char tmp;
     TreeNode *p, *g; //temporary nodes
@@ -335,21 +336,30 @@ char semantic(FILE *out, TreeNode *node) {
                                     else //VarK
                                         semwarning(out, node, 0);
                                 }
-                                //if local var and not static
-                                if (declarations.lookupGlobal(node->token->tokenstr) == NULL && node->isStatic != true) {
-                                    node->offset = foffset;
-                                    foffset -= node->size;
-                                    node->varKind = Local;
+                                //Global
+                                if (declarations.depth() <= 1){
+                                    node->offset = goffset;
+                                    goffset -= node->size;
+                                    //printf("Global var %s, goffset: %i\n", node->token->tokenstr, goffset);
+                                    node->varKind = Global;
                                 }
-                                else if (node->isStatic == true) {
+                                //LocalStatic
+                                else if (node->isStatic == true){
                                     node->offset = goffset;
                                     goffset -= node->size;
                                     node->varKind = LocalStatic;
                                 }
-                                else { //global
-                                    node->offset = goffset;
-                                    goffset -= node->size;
-                                    node->varKind = Global;
+                                //Parameter
+                                else if (node->subkind.decl == ParamK) {
+                                node->offset = foffset;
+                                node->varKind = Parameter;
+                                foffset-= node->size;
+                                }
+                                //Local
+                                else {
+                                    node->offset = foffset;
+                                    foffset -= node->size;
+                                    node->varKind = Local;
                                 }
                             }
 
@@ -357,9 +367,7 @@ char semantic(FILE *out, TreeNode *node) {
                                 node->offset--;
                                 node->size = node->arrlen + 1;
                             }
-                            if (node->subkind.decl == ParamK) {
-                                node->varKind = Parameter;
-                            }
+                            
                             //fprintf(out, "VarK or ParamK %s has r %c with expstr %s\n", node->token->tokenstr, r, node->expstr);
                             
                             break;
@@ -463,6 +471,9 @@ char semantic(FILE *out, TreeNode *node) {
                                 
                                 node->isConst = false;
                                 node->offset = p->offset;
+                                if (p->subkind.decl == ParamK) { // used in codegen
+                                    node->declaredAsParm = true;
+                                }
                             }
                             break;
 
@@ -516,6 +527,7 @@ char semantic(FILE *out, TreeNode *node) {
             break;
         
         case '{': //entering a new scope
+            node->size = foffset;
             if (hitfor) { //immediately follows a "do", so don't enter new scope as one was already previously entered at "for" - that's how for scopes work!
                 hitfor = 0;
                 break;
@@ -524,16 +536,21 @@ char semantic(FILE *out, TreeNode *node) {
                 declarations.enter("compound");
                 scoped = true;
             }
-            else {
+            if (justInFunc) {
                 justInFunc = false;
+                justInFunctmp = true;
+                node->size = foffset;
+                node->isConst = false;
+                break;
             }
             node->isConst = false;
             node->size = foffset;
             break;
 
         case FOR:
-        scopedepth++;
-        looped = true;
+            scopedepth++;
+            looped = true;
+            b = foffset;
             node->children[0]->isForIdDecl = true; //deprecated flag?
             if (!justInFunc){
                 declarations.enter("for");
@@ -544,6 +561,9 @@ char semantic(FILE *out, TreeNode *node) {
             }
             c[0] = 0;
             semantic(out, node->children[0]);
+            
+            foffset -= 2;
+            node->size = foffset;
             c[1] = 0;
             semantic(out, node->children[1]);
             if (node->children[2] != NULL) //otherwise segfaults if nothing follows "do"
@@ -552,6 +572,7 @@ char semantic(FILE *out, TreeNode *node) {
             }
             c[2] = 0;
             semantic(out, node->children[2]); //could be compound
+            //node->size = foffset;
             break;
 
         case TO:
@@ -976,6 +997,7 @@ char semantic(FILE *out, TreeNode *node) {
         case STRINGCONST:
             r = 'C';
             node->isConst = true;
+            node->isArray = true;
             node->size = strlen(node->token->tokenstr) - 1;
             node->varKind = Global;
             node->offset = goffset - 1;
@@ -1056,10 +1078,9 @@ char semantic(FILE *out, TreeNode *node) {
             semantic(out, node->children[i]);
         }
     }
-
-    if (node->token->tokenclass == '{' || node->token->tokenclass == FOR) {
-        node->size = foffset;
-    }
+    //if (justInFunctmp) {
+    //    node->size = -3;
+    //}
 
     if (scoped == true) { //hit FuncK
         //expected return but didn't get one
@@ -1081,6 +1102,15 @@ char semantic(FILE *out, TreeNode *node) {
     if (sib) {
         semantic(out, node->sibling);
     }
+
+    if (node->token->tokenclass == '{') {
+        node->size = foffset;
+    }
+
+    if (node->token->tokenclass == FOR) {
+        foffset = b;
+    }
+
     return r;
 }
 
@@ -1102,6 +1132,8 @@ void insertIO () {
     //construct FuncK TreeNode, with parameter node as child
     TreeNode *outputtn = newDeclNode(FuncK, Void, outputtd, outputparmtn);
     declarations.insert("output", outputtn);
+    //set location in TM code
+    outputtn->loc = 5;
 
     //void outputb(bool)
     //construct TokenData of FuncK node
@@ -1119,6 +1151,8 @@ void insertIO () {
     //construct FuncK TreeNode, with parameter node as child
     TreeNode *outputbtn = newDeclNode(FuncK, Void, outputbtd, outputbparmtn);
     declarations.insert("outputb", outputbtn);
+    //set location in TM code
+    outputbtn->loc = 16;
 
     //void outputc(char)
     //construct TokenData of FuncK node
@@ -1136,6 +1170,8 @@ void insertIO () {
     //construct FuncK TreeNode, with parameter node as child
     TreeNode *outputctn = newDeclNode(FuncK, Void, outputctd, outputcparmtn);
     declarations.insert("outputc", outputctn);
+    //set location in TM code
+    outputctn->loc = 27;
 
     //int input()
     //construct TokenData of FuncK node
@@ -1146,6 +1182,8 @@ void insertIO () {
     //construct FuncK TreeNode
     TreeNode *inputtn = newDeclNode(FuncK, Integer, inputtd);
     declarations.insert("input", inputtn);
+    //set location in TM code
+    inputtn->loc = 0;
 
     //bool inputb()
     //construct TokenData of FuncK node
@@ -1156,6 +1194,8 @@ void insertIO () {
     //construct FuncK TreeNode
     TreeNode *inputbtn = newDeclNode(FuncK, Boolean, inputbtd);
     declarations.insert("inputb", inputbtn);
+    //set location in TM code
+    inputbtn->loc = 11;
 
     //char inputc()
     //construct TokenData of FuncK node
@@ -1166,6 +1206,8 @@ void insertIO () {
     //construct FuncK TreeNode
     TreeNode *inputctn = newDeclNode(FuncK, Char, inputctd);
     declarations.insert("inputc", inputctn);
+    //set location in TM code
+    inputctn->loc = 22;
 
     //void outnl()
     //construct TokenData of FuncK node
@@ -1176,6 +1218,8 @@ void insertIO () {
     //construct FuncK TreeNode
     TreeNode *outnltn = newDeclNode(FuncK, Void, outnltd);
     declarations.insert("outnl", outnltn);
+    //set location in TM code
+    outnltn->loc = 33;
 
     //create a tree from these
     addSibling(inputtn, inputbtn);

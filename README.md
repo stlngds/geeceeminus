@@ -8,7 +8,7 @@ Some features include:
 - Support for basic data types and arrays
 - Functions
 - Global and local scopes
-- Loops. 
+- Loops
 
 Things that may not work: 
 - Strings

@@ -3,7 +3,7 @@ A compiler for the toy language C-. A semester-long project for the Spring 2021 
 
 Folder "HW7" is the final iteration of this project. The rest are older milestones, kept for posterity. 
 
-Some features include: 
+Features include: 
 - Syntax/semantic error handling
 - Support for basic data types and arrays
 - Functions

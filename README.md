@@ -1,5 +1,5 @@
 # geeceeminus
-A compiler for the toy language C-. A semester-long project for the Spring 2021 session of CS 445 at the University of Idaho, taught by Dr. Robert Heckendorn. 
+A compiler for the toy language C-. A semester-long project an undergraduate Compilers course. 
 
 Folder "HW7" is the final iteration of this project. The rest are older milestones, kept for posterity. 
 
